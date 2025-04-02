@@ -1,4 +1,5 @@
 <?php
+
 // Connexion à la base de données
 $servername = "localhost";
 $username = "root";
@@ -19,7 +20,7 @@ try {
             description TEXT
         )";
         $conn->exec($sql);
-    
+        
         // Ajouter quelques catégories par défaut
         $conn->exec("INSERT INTO Categories (nom, description) VALUES 
             ('Informatique', 'Matériel informatique, périphériques et accessoires'),
@@ -57,7 +58,15 @@ try {
 function e($text) {
     return htmlspecialchars($text, ENT_QUOTES, 'UTF-8');
 }
+session_start();
+// echo("session",$_SESSION['user_id']);
+// if (!isset($_SESSION['user_id'])) {
+//     header("Location: ENREGISTREMENT.php");
+//     exit();
+// }
 
+$nom_utilisateur = $_SESSION['nom'] ?? 'Utilisateur';
+$type_utilisateur = $_SESSION['role'] ?? '';
 // Traitement des catégories
 // Ajouter une catégorie
 if (isset($_POST['submit_categorie'])) {
@@ -281,7 +290,30 @@ if (isset($_POST['submit_sortie'])) {
         $error = "Erreur: " . $e->getMessage();
     }
 }
+// Vérifier si une activation/désactivation est demandée
+if (isset($_POST['active-button']) && isset($_POST['id']) && isset($_POST['active-button'])) {
+    // require 'connexion.php'; // Assure-toi d'inclure la connexion à la BD
 
+    $id = intval($_POST['id']);
+    $active = ($_POST['active-button'] === 'oui') ? 1 : 0;
+
+    // Vérifier si l'utilisateur est l'admin (Tchassem Indira)
+    $stmtCheck = $conn->prepare("SELECT nom FROM Utilisateurs WHERE id = :id");
+    $stmtCheck->execute(['id' => $id]);
+    $utilisateur = $stmtCheck->fetch(PDO::FETCH_ASSOC);
+
+    if ($utilisateur && $utilisateur['nom'] !== 'Tchassem Indira') {
+        $stmt = $conn->prepare("UPDATE Utilisateurs SET active = :active WHERE id = :id");
+        $stmt->execute(['active' => $active, 'id' => $id]);
+
+        // Répondre en JSON pour l'AJAX
+        // echo json_encode(["success" => true, "new_status" => $active ? "Oui" : "Non"]);
+    } else {
+        echo json_encode(["success" => false, "message" => "Action non autorisée"]);
+    }
+
+    // exit();
+}
 // Ajouter un inventaire
 if (isset($_POST['submit_inventaire'])) {
     try {
@@ -366,7 +398,10 @@ try {
     $produits = $stmt->fetchAll(PDO::FETCH_ASSOC);
 } catch(PDOException $e) {
     echo "Erreur: " . $e->getMessage();
+
 }
+
+//recupeer des produits pour la recherche
 
 
 
@@ -529,6 +564,23 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
             color: red;
             font-weight: bold;
         }
+        
+.btn-oui {
+    color: white;
+    background-color: green;
+    padding: 5px 10px;
+    text-decoration: none;
+    border-radius: 5px;
+    margin-right: 5px;
+}
+
+.btn-non {
+    color: white;
+    background-color: red;
+    padding: 5px 10px;
+    text-decoration: none;
+    border-radius: 5px;
+}
     </style>
 </head>
 <body>
@@ -581,16 +633,16 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
             <div class="menu-item" data-section="inventaire">
                 <i class="menu-icon">🔍</i> Inventaire
             </div>
-            <div class="menu-item" data-section="Utilisateurs">
-              <a href="utilisateurs"> <i class="menu-icon">👤</i> Utilisateurs</a> 
+            <div class="menu-item" data-section="utilisateurs">
+       <i class="menu-icon">👤</i> Utilisateurs
             </div>
             
             
         </div>
         <div class="sidebar-footer">
             <div class="user-info">
-                <div class="user-avatar">D</div>
-                <div class="user-name">Deconnexion</div>
+                <div class="user-avatar"></div>
+              
             </div>
         </div>
     </div>
@@ -604,6 +656,18 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
         <?php if (isset($error)): ?>
         <div class="message error"><?php echo $error; ?></div>
         <?php endif; ?>
+
+     <div class="dashboard-header" style="padding:10px;background: #1a237e;">
+    <nav >
+
+<div style="display: flex; width: 100%;
+    align-items: end;
+    justify-content: space-between;">
+    <span style="color:white">👤 <?php echo $nom_utilisateur . " (" . $type_utilisateur . ")"; ?></span>
+    <a href="Deconnexion.php" style="color: white; text-decoration: none; padding: 5px 10px; background-color: red; border-radius: 5px;">Déconnexion</a>
+</div>
+</nav>
+    </div>
 
         <!-- Dashboard Home -->
         <div class="content-section active" id="dashboard">
@@ -674,27 +738,29 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
             <div class="dashboard-header">
                 <h1>Gestion des Fournisseurs</h1>
             </div>
-            
-            <div class="dashboard-card">
-                <h2 class="card-title">Ajouter un Fournisseur</h2>
-                <div class="card-content">
-                    <form method="POST" action="">
-                        <div class="form-group">
-                            <label for="nom_fournisseur">Nom</label>
-                            <input type="text" id="nom_fournisseur" name="nom_fournisseur" required>
-                        </div>
-                        <div class="form-group">
-                            <label for="contact_fournisseur">Contact</label>
-                            <input type="text" id="contact_fournisseur" name="contact_fournisseur">
-                        </div>
-                        <div class="form-group">
-                            <label for="adresse_fournisseur">Adresse</label>
-                            <textarea id="adresse_fournisseur" name="adresse_fournisseur" rows="3"></textarea>
-                        </div>
-                        <button type="submit" name="submit_fournisseur">Enregistrer</button>
-                    </form>
+            <?php if ($type_utilisateur !== 'magasinier') : ?>
+    <div class="dashboard-card">
+        <h2 class="card-title">Ajouter un Fournisseur</h2>
+        <div class="card-content">
+            <form method="POST" action="">
+                <div class="form-group">
+                    <label for="nom_fournisseur">Nom</label>
+                    <input type="text" id="nom_fournisseur" name="nom_fournisseur" required>
                 </div>
-            </div>
+                <div class="form-group">
+                    <label for="contact_fournisseur">Contact</label>
+                    <input type="text" id="contact_fournisseur" name="contact_fournisseur">
+                </div>
+                <div class="form-group">
+                    <label for="adresse_fournisseur">Adresse</label>
+                    <textarea id="adresse_fournisseur" name="adresse_fournisseur" rows="3"></textarea>
+                </div>
+                <button type="submit" name="submit_fournisseur">Enregistrer</button>
+            </form>
+        </div>
+    </div>
+<?php endif; ?>
+
             
             <div class="dashboard-card">
                 <h2 class="card-title">Liste des Fournisseurs</h2>
@@ -706,7 +772,10 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
                                 <th>Nom</th>
                                 <th>Contact</th>
                                 <th>Adresse</th>
-                                <th>Actions</th>
+                                <?php if ($type_utilisateur !== 'magasinier') : ?>
+                    <th>Actions</th>
+                <?php endif; ?>
+                              
                             </tr>
                         </thead>
                         <tbody>
@@ -724,10 +793,13 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
                                         echo "<td>" . e($fournisseur['nom']) . "</td>";
                                         echo "<td>" . e($fournisseur['contact']) . "</td>";
                                         echo "<td>" . e($fournisseur['adresse']) . "</td>";
+                                        //condition pour masquer 
+                                        if ($type_utilisateur !== 'magasinier') {
                                         echo "<td>";
                                         echo "<button type='button' class='btn-edit' data-id='{$fournisseur_id}' data-type='fournisseur'>Modifier</button> ";
                                         echo "<button type='button' class='btn-delete' onclick=\"confirmerSuppression('fournisseur_id', {$fournisseur_id}, 'delete_fournisseur')\">Supprimer</button>";
                                         echo "</td>";
+                                        }
                                         echo "</tr>";
                                         
                                         // Formulaire d'édition (caché par défaut)
@@ -780,7 +852,7 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
             <div class="dashboard-header">
                 <h1>Gestion des Catégories</h1>
             </div>
-            
+            <?php if ($type_utilisateur !== 'magasinier') : ?>
             <div class="dashboard-card">
                 <h2 class="card-title">Ajouter une Catégorie</h2>
                 <div class="card-content">
@@ -797,6 +869,7 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
                     </form>
                 </div>
             </div>
+            <?php endif; ?>
             
             <div class="dashboard-card">
                 <h2 class="card-title">Liste des Catégories</h2>
@@ -872,10 +945,12 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
 
         <!-- Ajouter Produit Section -->
         <div class="content-section" id="ajouter-produit">
+            
             <div class="dashboard-header">
                 <h1>Ajouter un Produit</h1>
+                
             </div>
-            
+                        
             <div class="dashboard-card">
                 <h2 class="card-title">Informations du Produit</h2>
                 <div class="card-content">
@@ -928,7 +1003,9 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
         <div class="content-section" id="liste-produits">
             <div class="dashboard-header">
                 <h1>Liste des Produits</h1>
+                
             </div>
+
             
             <div class="filter-bar">
                 <form method="GET" action="" id="filter-form">
@@ -948,6 +1025,37 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
             <div class="dashboard-card">
                 <div class="card-content">
                     <table id="liste-produits-table">
+                        <!-- Rechercher produit -->
+                        <form method="POST" style="position: absolute; top: 20px; right: 20px;">
+    <input type="text" id="produit_nom" name="produit_nom" placeholder="Rechercher..." 
+        style="width: 150px; padding: 5px; border-radius: 5px;">
+    <button type="submit" name="search" style="padding: 5px 10px; cursor: pointer;">🔍</button>
+</form>
+
+<div id="resultats" style="position: absolute; top: 50px; right: 20px; background: white; border: 1px solid gray; width: 200px;"></div>
+
+<script>
+document.getElementById("produit_nom").addEventListener("keyup", function() {
+    let recherche = this.value;
+
+    if (recherche.length > 0) {
+        let xhr = new XMLHttpRequest();
+        xhr.open("POST", "recherche_produits.php", true);
+        xhr.setRequestHeader("Content-Type", "application/x-www-form-urlencoded");
+        xhr.onreadystatechange = function () {
+            if (xhr.readyState == 4 && xhr.status == 200) {
+                document.getElementById("resultats").innerHTML = xhr.responseText;
+            }
+        };
+        xhr.send("produit_nom=" + recherche);
+    } else {
+        document.getElementById("resultats").innerHTML = "";
+    }
+});
+</script>
+
+
+
                         <thead>
                             <tr>
                                 <th>ID</th>
@@ -1331,9 +1439,113 @@ $categorie_filter = isset($_GET['categorie']) ? intval($_GET['categorie']) : 0;
                 </div>
             </div>
         </div>
+
+        
+    <div class="content-section" id="utilisateurs">
+    <div class="dashboard-header">
+                <h1>Gestion des Utilisaeurs</h1>
+            </div>
+            <div>
+            <?php
+
+
+
+
+
+?>
+
+     
+
+
+<div class="dashboard-card">
+<div class="card-content">
+ 
+    <table border="1">
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Nom</th>
+                <th>Email</th>
+                <th>Rôle</th>
+                <th>Active</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            <?php
+            $stmt = $conn->prepare("SELECT * FROM Utilisateurs");
+            $stmt->execute();
+            $utilisateurs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            foreach ($utilisateurs as $utilisateur) {
+                echo "<tr>";
+                echo "<td>" . htmlspecialchars($utilisateur['id']) . "</td>";
+                echo "<td>" . htmlspecialchars($utilisateur['nom']) . "</td>";
+                echo "<td>" . htmlspecialchars($utilisateur['email']) . "</td>";
+                echo "<td>" . htmlspecialchars($utilisateur['role']) . "</td>";
+                
+                // Afficher "Oui" ou "Non" dans la colonne Active
+                echo "<td>" . ($utilisateur['active'] ? 'Oui' : 'Non') . "</td>";
+
+                // Protection de l'admin
+                if ($utilisateur['nom'] === 'Tchassem Indira') {
+                    echo "<td><strong>Admin protégé</strong></td>";
+                } else {
+                    echo "<td>";
+                    echo "<form method='POST'  style='display:inline;'>";
+                    echo "<input type='hidden' name='id' value='" . $utilisateur['id'] . "'>";
+                    echo "<button type='submit' name='active-button' value='oui' class='btn-oui'>Oui</button> ";
+                    echo "<button type='submit' name='active-button' value='non' class='btn-non'>Non</button>";
+                    echo "</form>";
+                    echo "</td>";
+                }
+
+                echo "</tr>";
+            }
+            ?>
+        </tbody>
+    </table>
+</div>
+</div>
     </div>
 
-    
+<!--Demande d'acces du magasinier 
+<h2>Demandes d'Accès</h2>
+<table>
+    <thead>
+        <tr>
+            <th>ID</th>
+            <th>Utilisateur</th>
+            <th>Demande</th>
+            <th>Statut</th>
+            <th>Action</th>
+        </tr>
+    </thead>
+    <tbody>-->
+        <?php
+        $query = $conn->prepare("SELECT d.id, u.email, d.demande, d.statut FROM demandes_acces d JOIN utilisateurs u ON d.utilisateur_id = u.id WHERE d.statut = 'en attente'");
+        $query->execute();
+        $demandes = $query->fetchAll(PDO::FETCH_ASSOC);
+
+        foreach ($demandes as $demande) {
+            echo "<tr>";
+            echo "<td>" . $demande['id'] . "</td>";
+            echo "<td>" . $demande['email'] . "</td>";
+            echo "<td>" . $demande['demande'] . "</td>";
+            echo "<td>" . $demande['statut'] . "</td>";
+            echo "<td>
+                    <a href='gerer_demande.php?id=" . $demande['id'] . "&action=approuver'>Approuver</a>
+                    <a href='gerer_demande.php?id=" . $demande['id'] . "&action=refuser'>Refuser</a>
+                  </td>";
+            echo "</tr>";
+        }
+        ?>
+    </tbody>
+</table>
+
+ 
+
+                        
     <script>
         document.addEventListener('DOMContentLoaded', function() {
             // Handle menu clicks
